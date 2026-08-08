@@ -131,7 +131,7 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Aucune raison four
     await log_action(ctx.guild, f"⚠️ **Warn** : {member} averti par {ctx.author} ({count} total). Raison : {reason}")
 
 
-@bot.command(help="Affiche les avertissements d'un membre. Usage: !warnings @membre")
+@bot.command(name="warnings", help="Affiche les avertissements d'un membre. Usage: !warnings @membre")
 async def warnings_cmd(ctx, member: discord.Member):
     user_warnings = warnings.get(member.id, [])
     if not user_warnings:
@@ -139,9 +139,6 @@ async def warnings_cmd(ctx, member: discord.Member):
         return
     text = "\n".join(f"{i+1}. {r}" for i, r in enumerate(user_warnings))
     await ctx.send(f"⚠️ Avertissements de {member.mention} :\n{text}")
-
-bot.remove_command("warnings")
-bot.add_command(commands.Command(warnings_cmd, name="warnings", help="Affiche les avertissements d'un membre."))
 
 
 @bot.command(help="Ajoute un rôle à un membre. Usage: !addrole @membre @role")
