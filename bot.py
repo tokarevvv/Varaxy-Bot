@@ -202,13 +202,6 @@ async def vouch(
         )
         return
 
-    if interaction.channel.id != channel.id:
-        await interaction.response.send_message(
-            f"❌ Cette commande ne peut être utilisée que dans {channel.mention}.",
-            ephemeral=True
-        )
-        return
-
     stars = "⭐" * note + "☆" * (5 - note)
 
     embed = discord.Embed(
