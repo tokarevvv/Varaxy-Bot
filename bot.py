@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+from datetime import timedelta
 import discord
 from discord.ext import commands
 from collections import defaultdict, deque
@@ -64,7 +65,7 @@ async def on_message(message: discord.Message):
     if len(log) == SPAM_MESSAGE_LIMIT and (now - log[0]) < SPAM_TIME_WINDOW:
         try:
             await message.author.timeout(
-                discord.utils.utcnow() + discord.timedelta(seconds=SPAM_TIMEOUT_DURATION),
+                discord.utils.utcnow() + timedelta(seconds=SPAM_TIMEOUT_DURATION),
                 reason="Anti-spam automatique"
             )
             await message.channel.send(
@@ -115,7 +116,7 @@ async def kick(ctx, member: discord.Member, *, reason: str = "Aucune raison four
 @bot.command(help="Mute un membre (timeout). Usage: !mute @membre <minutes> [raison]")
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, minutes: int, *, reason: str = "Aucune raison fournie"):
-    duration = discord.timedelta(minutes=minutes)
+    duration = timedelta(minutes=minutes)
     await member.timeout(discord.utils.utcnow() + duration, reason=reason)
     await ctx.send(f"🔇 {member.mention} a été mute pour {minutes} min. Raison : {reason}")
     await log_action(ctx.guild, f"🔇 **Mute** : {member} mute {minutes}min par {ctx.author}. Raison : {reason}")
@@ -134,8 +135,46 @@ async def unmute(ctx, member: discord.Member):
 async def warn(ctx, member: discord.Member, *, reason: str = "Aucune raison fournie"):
     warnings[member.id].append(reason)
     count = len(warnings[member.id])
-    await ctx.send(f"⚠️ {member.mention} a reçu un avertissement ({count} au total). Raison : {reason}")
-    await log_action(ctx.guild, f"⚠️ **Warn** : {member} averti par {ctx.author} ({count} total). Raison : {reason}")
+
+    # Sanctions progressives automatiques :
+    # 3 warns = mute 1h
+    # 4 warns = mute 24h
+    # 5 warns = ban
+    sanction = ""
+
+    try:
+        if count == 3:
+            await member.timeout(
+                discord.utils.utcnow() + timedelta(hours=1),
+                reason="3 avertissements"
+            )
+            sanction = "🔇 Sanction automatique : mute 1 heure."
+
+        elif count == 4:
+            await member.timeout(
+                discord.utils.utcnow() + timedelta(hours=24),
+                reason="4 avertissements"
+            )
+            sanction = "🔇 Sanction automatique : mute 24 heures."
+
+        elif count >= 5:
+            await member.ban(reason="5 avertissements")
+            sanction = "🔨 Sanction automatique : bannissement."
+
+    except discord.Forbidden:
+        sanction = "⚠️ La sanction automatique n'a pas pu être appliquée (permissions insuffisantes)."
+    except Exception as e:
+        sanction = f"⚠️ Erreur lors de la sanction automatique : {e}"
+
+    await ctx.send(
+        f"⚠️ {member.mention} a reçu un avertissement ({count} au total). "
+        f"Raison : {reason}\n{sanction}"
+    )
+    await log_action(
+        ctx.guild,
+        f"⚠️ **Warn** : {member} averti par {ctx.author} ({count} total). "
+        f"Raison : {reason} {sanction}"
+    )
 
 
 @bot.command(name="warnings", help="Affiche les avertissements d'un membre. Usage: !warnings @membre")
