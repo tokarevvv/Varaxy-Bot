@@ -12,6 +12,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 # ---------- CONFIGURATION ----------
 PREFIX = "!"
 MOD_LOG_CHANNEL_NAME = "mod-log"   # nom du salon où les logs de modération sont envoyés
+VOUCH_CHANNEL_NAME = "⭐│feedback"  # nom du salon où les avis !vouch sont publiés
 
 # Anti-spam : nombre de messages max autorisés dans la fenêtre de temps
 SPAM_MESSAGE_LIMIT = 5
@@ -41,6 +42,11 @@ async def log_action(guild: discord.Guild, message: str):
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        print(f"🔄 {len(synced)} commande(s) slash synchronisée(s).")
+    except Exception as e:
+        print(f"⚠️ Erreur de synchronisation des commandes slash : {e}")
     print("------")
 
 
@@ -169,6 +175,42 @@ async def clear(ctx, amount: int):
     deleted = await ctx.channel.purge(limit=amount + 1)  # +1 pour supprimer la commande elle-même
     msg = await ctx.send(f"🧹 {len(deleted) - 1} messages supprimés.")
     await msg.delete(delay=3)
+
+
+# ---------- COMMANDE !vouch (avis produit) ----------
+
+@bot.command(
+    name="vouch",
+    help="Poste un avis sur un produit. Usage: !vouch <produit> <note 1-5> [commentaire]"
+)
+async def vouch(ctx, produit: str, note: int, *, commentaire: str = None):
+    if note < 1 or note > 5:
+        await ctx.send("❌ La note doit être comprise entre 1 et 5.")
+        return
+
+    channel = discord.utils.get(ctx.guild.text_channels, name=VOUCH_CHANNEL_NAME)
+    if channel is None:
+        await ctx.send(f"❌ Le salon #{VOUCH_CHANNEL_NAME} n'existe pas sur ce serveur.")
+        return
+
+    stars = "⭐" * note + "☆" * (5 - note)
+
+    embed = discord.Embed(
+        title="Nouvel avis",
+        color=discord.Color.purple(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(name="Produit", value=produit, inline=False)
+    embed.add_field(name="Note", value=f"{stars} ({note}/5)", inline=False)
+    embed.add_field(name="Commentaire", value=commentaire or "Aucun commentaire", inline=False)
+    embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+
+    if ctx.message.attachments:
+        embed.set_image(url=ctx.message.attachments[0].url)
+
+    await channel.send(embed=embed)
+    if channel.id != ctx.channel.id:
+        await ctx.send(f"✅ Ton avis a été publié dans #{VOUCH_CHANNEL_NAME} !")
 
 
 # ---------- GESTION DES ERREURS ----------
