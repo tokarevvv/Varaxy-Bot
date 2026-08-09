@@ -178,60 +178,35 @@ async def clear(ctx, amount: int):
     await msg.delete(delay=3)
 
 
-# ---------- COMMANDE !vouch (avis produit, guidée) ----------
+# ---------- COMMANDE /vouch (avis produit) ----------
 
-@bot.command(
-    name="vouch",
-    help="Poste un avis sur un produit, avec des questions guidées. Usage: !vouch"
+@bot.tree.command(name="vouch", description="Poste un avis sur un produit ou service acheté")
+@discord.app_commands.describe(
+    produit="Quel produit ou service as-tu acheté ?",
+    note="Ta note de 1 à 5 étoiles",
+    commentaire="Ton commentaire (facultatif)",
+    preuve="Capture d'écran ou image en preuve (facultatif)"
 )
-async def vouch(ctx):
-    channel = discord.utils.get(ctx.guild.text_channels, name=VOUCH_CHANNEL_NAME)
+async def vouch(
+    interaction: discord.Interaction,
+    produit: str,
+    note: discord.app_commands.Range[int, 1, 5],
+    commentaire: str = None,
+    preuve: discord.Attachment = None
+):
+    channel = discord.utils.get(interaction.guild.text_channels, name=VOUCH_CHANNEL_NAME)
     if channel is None:
-        await ctx.send(f"❌ Le salon #{VOUCH_CHANNEL_NAME} n'existe pas sur ce serveur.")
+        await interaction.response.send_message(
+            f"❌ Le salon #{VOUCH_CHANNEL_NAME} n'existe pas sur ce serveur.",
+            ephemeral=True
+        )
         return
 
-    if ctx.channel.id != channel.id:
-        await ctx.send(f"❌ Cette commande ne peut être utilisée que dans {channel.mention}.", delete_after=6)
-        await ctx.message.delete()
-        return
-
-    def check(m):
-        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-
-    to_delete = [ctx.message]
-
-    try:
-        q1 = await ctx.send("📝 Quel produit ou service as-tu acheté ?")
-        to_delete.append(q1)
-        r1 = await bot.wait_for("message", check=check, timeout=120)
-        to_delete.append(r1)
-        produit = r1.content
-
-        q2 = await ctx.send("⭐ Quelle note lui donnes-tu ? (1 à 5)")
-        to_delete.append(q2)
-        while True:
-            r2 = await bot.wait_for("message", check=check, timeout=120)
-            to_delete.append(r2)
-            if r2.content.isdigit() and 1 <= int(r2.content) <= 5:
-                note = int(r2.content)
-                break
-            warn = await ctx.send("❌ Merci d'entrer un nombre entre 1 et 5.")
-            to_delete.append(warn)
-
-        q3 = await ctx.send("💬 Un commentaire ? (ou envoie `non` pour passer)")
-        to_delete.append(q3)
-        r3 = await bot.wait_for("message", check=check, timeout=120)
-        to_delete.append(r3)
-        commentaire = None if r3.content.strip().lower() == "non" else r3.content
-
-        q4 = await ctx.send("📸 Une preuve (capture d'écran) à joindre ? Envoie l'image, ou `non` pour passer.")
-        to_delete.append(q4)
-        r4 = await bot.wait_for("message", check=check, timeout=120)
-        to_delete.append(r4)
-        image_url = r4.attachments[0].url if r4.attachments else None
-
-    except asyncio.TimeoutError:
-        await ctx.send("⏱️ Temps écoulé, avis annulé. Retape `!vouch` pour recommencer.", delete_after=8)
+    if interaction.channel.id != channel.id:
+        await interaction.response.send_message(
+            f"❌ Cette commande ne peut être utilisée que dans {channel.mention}.",
+            ephemeral=True
+        )
         return
 
     stars = "⭐" * note + "☆" * (5 - note)
@@ -244,17 +219,13 @@ async def vouch(ctx):
     embed.add_field(name="Produit", value=produit, inline=False)
     embed.add_field(name="Note", value=f"{stars} ({note}/5)", inline=False)
     embed.add_field(name="Commentaire", value=commentaire or "Aucun commentaire", inline=False)
-    embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+    embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
 
-    if image_url:
-        embed.set_image(url=image_url)
-
-    try:
-        await ctx.channel.delete_messages(to_delete)
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+    if preuve:
+        embed.set_image(url=preuve.url)
 
     await channel.send(embed=embed)
+    await interaction.response.send_message(f"✅ Ton avis a été publié dans {channel.mention} !", ephemeral=True)
 
 
 # ---------- GESTION DES ERREURS ----------
