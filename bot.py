@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 import discord
 from discord.ext import commands
 from collections import defaultdict, deque
@@ -177,20 +178,60 @@ async def clear(ctx, amount: int):
     await msg.delete(delay=3)
 
 
-# ---------- COMMANDE !vouch (avis produit) ----------
+# ---------- COMMANDE !vouch (avis produit, guidée) ----------
 
 @bot.command(
     name="vouch",
-    help="Poste un avis sur un produit. Usage: !vouch <produit> <note 1-5> [commentaire]"
+    help="Poste un avis sur un produit, avec des questions guidées. Usage: !vouch"
 )
-async def vouch(ctx, produit: str, note: int, *, commentaire: str = None):
-    if note < 1 or note > 5:
-        await ctx.send("❌ La note doit être comprise entre 1 et 5.")
-        return
-
+async def vouch(ctx):
     channel = discord.utils.get(ctx.guild.text_channels, name=VOUCH_CHANNEL_NAME)
     if channel is None:
         await ctx.send(f"❌ Le salon #{VOUCH_CHANNEL_NAME} n'existe pas sur ce serveur.")
+        return
+
+    if ctx.channel.id != channel.id:
+        await ctx.send(f"❌ Cette commande ne peut être utilisée que dans {channel.mention}.", delete_after=6)
+        await ctx.message.delete()
+        return
+
+    def check(m):
+        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+    to_delete = [ctx.message]
+
+    try:
+        q1 = await ctx.send("📝 Quel produit ou service as-tu acheté ?")
+        to_delete.append(q1)
+        r1 = await bot.wait_for("message", check=check, timeout=120)
+        to_delete.append(r1)
+        produit = r1.content
+
+        q2 = await ctx.send("⭐ Quelle note lui donnes-tu ? (1 à 5)")
+        to_delete.append(q2)
+        while True:
+            r2 = await bot.wait_for("message", check=check, timeout=120)
+            to_delete.append(r2)
+            if r2.content.isdigit() and 1 <= int(r2.content) <= 5:
+                note = int(r2.content)
+                break
+            warn = await ctx.send("❌ Merci d'entrer un nombre entre 1 et 5.")
+            to_delete.append(warn)
+
+        q3 = await ctx.send("💬 Un commentaire ? (ou envoie `non` pour passer)")
+        to_delete.append(q3)
+        r3 = await bot.wait_for("message", check=check, timeout=120)
+        to_delete.append(r3)
+        commentaire = None if r3.content.strip().lower() == "non" else r3.content
+
+        q4 = await ctx.send("📸 Une preuve (capture d'écran) à joindre ? Envoie l'image, ou `non` pour passer.")
+        to_delete.append(q4)
+        r4 = await bot.wait_for("message", check=check, timeout=120)
+        to_delete.append(r4)
+        image_url = r4.attachments[0].url if r4.attachments else None
+
+    except asyncio.TimeoutError:
+        await ctx.send("⏱️ Temps écoulé, avis annulé. Retape `!vouch` pour recommencer.", delete_after=8)
         return
 
     stars = "⭐" * note + "☆" * (5 - note)
@@ -205,12 +246,15 @@ async def vouch(ctx, produit: str, note: int, *, commentaire: str = None):
     embed.add_field(name="Commentaire", value=commentaire or "Aucun commentaire", inline=False)
     embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
 
-    if ctx.message.attachments:
-        embed.set_image(url=ctx.message.attachments[0].url)
+    if image_url:
+        embed.set_image(url=image_url)
+
+    try:
+        await ctx.channel.delete_messages(to_delete)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
 
     await channel.send(embed=embed)
-    if channel.id != ctx.channel.id:
-        await ctx.send(f"✅ Ton avis a été publié dans #{VOUCH_CHANNEL_NAME} !")
 
 
 # ---------- GESTION DES ERREURS ----------
