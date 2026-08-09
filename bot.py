@@ -2,7 +2,6 @@ import os
 import time
 import asyncio
 import discord
-import aiohttp
 from discord.ext import commands
 from collections import defaultdict, deque
 from dotenv import load_dotenv
@@ -169,110 +168,6 @@ async def removerole(ctx, member: discord.Member, role: discord.Role):
     await member.remove_roles(role)
     await ctx.send(f"✅ Le rôle {role.mention} a été retiré à {member.mention}.")
     await log_action(ctx.guild, f"➖ **Rôle retiré** : {role} retiré à {member} par {ctx.author}.")
-
-
-@bot.command(help="Ajoute un emoji unicode à un rôle. Usage: !roleemoji @role 🔥")
-@commands.has_permissions(manage_roles=True)
-async def roleemoji(ctx, role: discord.Role, emoji: str):
-    try:
-        await role.edit(unicode_emoji=emoji)
-        await ctx.send(f"✅ L'emoji {emoji} a été ajouté au rôle **{role.name}** !")
-        await log_action(ctx.guild, f"🎨 **Emoji de rôle** : {emoji} ajouté à {role} par {ctx.author}.")
-    except discord.HTTPException as e:
-        await ctx.send(f"❌ Erreur : le serveur n'a peut-être pas le niveau de boost requis (niveau 2 minimum). Détail : {e}")
-    except discord.Forbidden:
-        await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie que mon rôle bot est bien placé au-dessus).")
-
-
-@roleemoji.error
-async def roleemoji_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Tu n'as pas la permission de gérer les rôles.")
-    elif isinstance(error, commands.RoleNotFound):
-        await ctx.send("❌ Rôle introuvable.")
-
-
-@bot.command(help="Ajoute une icône à un rôle, via le nom d'un emoji custom du serveur ou une image jointe. Usage: !roleicon @role [nom_emoji]")
-@commands.has_permissions(manage_roles=True)
-async def roleicon(ctx, role: discord.Role, emoji_name: str = None):
-    image_bytes = None
-
-    # Cas 1 : un nom d'emoji custom du serveur a été fourni (ex: monlogo, sans les deux-points)
-    if emoji_name is not None:
-        clean_name = emoji_name.strip(":")
-        custom_emoji = discord.utils.get(ctx.guild.emojis, name=clean_name)
-        if custom_emoji is None:
-            await ctx.send(f"❌ Aucun emoji custom nommé `{clean_name}` trouvé sur ce serveur. Vérifie l'orthographe exacte (sans les `:`).")
-            return
-        async with aiohttp.ClientSession() as session:
-            async with session.get(str(custom_emoji.url)) as resp:
-                if resp.status != 200:
-                    await ctx.send("❌ Impossible de récupérer l'image de cet emoji.")
-                    return
-                image_bytes = await resp.read()
-
-    # Cas 2 : une image a été jointe au message
-    elif ctx.message.attachments:
-        attachment = ctx.message.attachments[0]
-        if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            await ctx.send("❌ Format non supporté. Utilise une image PNG ou JPG.")
-            return
-        if attachment.size > 256 * 1024:
-            await ctx.send("❌ L'image est trop lourde (max 256 Ko pour une icône de rôle).")
-            return
-        async with aiohttp.ClientSession() as session:
-            async with session.get(attachment.url) as resp:
-                if resp.status != 200:
-                    await ctx.send("❌ Impossible de télécharger l'image.")
-                    return
-                image_bytes = await resp.read()
-
-    else:
-        await ctx.send("❌ Indique le nom d'un emoji custom du serveur (`!roleicon @role monlogo`), ou joins une image.")
-        return
-
-    try:
-        await role.edit(icon=image_bytes)
-        await ctx.send(f"✅ L'icône a été ajoutée au rôle **{role.name}** !")
-        await log_action(ctx.guild, f"🎨 **Icône de rôle** : icône ajoutée à {role} par {ctx.author}.")
-    except discord.HTTPException as e:
-        await ctx.send(f"❌ Erreur : vérifie que ton serveur a le niveau de boost 2 minimum, et que l'image respecte les 256 Ko max. Détail : {e}")
-    except discord.Forbidden:
-        await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie la hiérarchie des rôles).")
-        attachment = ctx.message.attachments[0]
-        if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            await ctx.send("❌ Format non supporté. Utilise une image PNG ou JPG.")
-            return
-        if attachment.size > 256 * 1024:
-            await ctx.send("❌ L'image est trop lourde (max 256 Ko pour une icône de rôle).")
-            return
-        async with aiohttp.ClientSession() as session:
-            async with session.get(attachment.url) as resp:
-                if resp.status != 200:
-                    await ctx.send("❌ Impossible de télécharger l'image.")
-                    return
-                image_bytes = await resp.read()
-
-    else:
-        await ctx.send("❌ Fournis soit un emoji custom du serveur (`!roleicon @role :monemoji:`), soit une image jointe.")
-        return
-
-    try:
-        await role.edit(icon=image_bytes)
-        await ctx.send(f"✅ L'icône a été ajoutée au rôle **{role.name}** !")
-        await log_action(ctx.guild, f"🎨 **Icône de rôle** : icône ajoutée à {role} par {ctx.author}.")
-    except discord.HTTPException as e:
-        await ctx.send(f"❌ Erreur : vérifie que ton serveur a le niveau de boost 2 minimum, et que l'image respecte les 256 Ko max. Détail : {e}")
-    except discord.Forbidden:
-        await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie la hiérarchie des rôles).")
-
-
-@roleicon.error
-async def roleicon_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Tu n'as pas la permission de gérer les rôles.")
-    elif isinstance(error, commands.RoleNotFound):
-        await ctx.send("❌ Rôle introuvable.")
 
 
 @bot.command(help="Supprime des messages. Usage: !clear <nombre>")
