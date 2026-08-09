@@ -192,36 +192,49 @@ async def roleemoji_error(ctx, error):
         await ctx.send("❌ Rôle introuvable.")
 
 
-@bot.command(help="Ajoute une image en icône de rôle (joindre une image). Usage: !roleicon @role")
+@bot.command(help="Ajoute une icône à un rôle, via un emoji custom du serveur ou une image jointe. Usage: !roleicon @role [:emoji_custom:]")
 @commands.has_permissions(manage_roles=True)
-async def roleicon(ctx, role: discord.Role):
-    if not ctx.message.attachments:
-        await ctx.send("❌ Merci de joindre une image (PNG/JPG) avec la commande.")
+async def roleicon(ctx, role: discord.Role, emoji: discord.PartialEmoji = None):
+    image_bytes = None
+
+    # Cas 1 : un emoji custom du serveur a été fourni (ex: :monemoji:)
+    if emoji is not None:
+        if emoji.is_unicode_emoji():
+            await ctx.send("❌ Pour un emoji unicode standard, utilise plutôt `!roleemoji @role 🔥`.")
+            return
+        async with aiohttp.ClientSession() as session:
+            async with session.get(str(emoji.url)) as resp:
+                if resp.status != 200:
+                    await ctx.send("❌ Impossible de récupérer l'image de cet emoji.")
+                    return
+                image_bytes = await resp.read()
+
+    # Cas 2 : une image a été jointe au message
+    elif ctx.message.attachments:
+        attachment = ctx.message.attachments[0]
+        if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+            await ctx.send("❌ Format non supporté. Utilise une image PNG ou JPG.")
+            return
+        if attachment.size > 256 * 1024:
+            await ctx.send("❌ L'image est trop lourde (max 256 Ko pour une icône de rôle).")
+            return
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as resp:
+                if resp.status != 200:
+                    await ctx.send("❌ Impossible de télécharger l'image.")
+                    return
+                image_bytes = await resp.read()
+
+    else:
+        await ctx.send("❌ Fournis soit un emoji custom du serveur (`!roleicon @role :monemoji:`), soit une image jointe.")
         return
-
-    attachment = ctx.message.attachments[0]
-
-    if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        await ctx.send("❌ Format non supporté. Utilise une image PNG ou JPG.")
-        return
-
-    if attachment.size > 256 * 1024:
-        await ctx.send("❌ L'image est trop lourde (max 256 Ko pour une icône de rôle).")
-        return
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(attachment.url) as resp:
-            if resp.status != 200:
-                await ctx.send("❌ Impossible de télécharger l'image.")
-                return
-            image_bytes = await resp.read()
 
     try:
         await role.edit(icon=image_bytes)
         await ctx.send(f"✅ L'icône a été ajoutée au rôle **{role.name}** !")
         await log_action(ctx.guild, f"🎨 **Icône de rôle** : icône ajoutée à {role} par {ctx.author}.")
     except discord.HTTPException as e:
-        await ctx.send(f"❌ Erreur : vérifie que ton serveur a le niveau de boost 2 minimum. Détail : {e}")
+        await ctx.send(f"❌ Erreur : vérifie que ton serveur a le niveau de boost 2 minimum, et que l'image respecte les 256 Ko max. Détail : {e}")
     except discord.Forbidden:
         await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie la hiérarchie des rôles).")
 
