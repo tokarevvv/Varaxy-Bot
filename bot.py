@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 import discord
+import aiohttp
 from discord.ext import commands
 from collections import defaultdict, deque
 from dotenv import load_dotenv
@@ -168,6 +169,69 @@ async def removerole(ctx, member: discord.Member, role: discord.Role):
     await member.remove_roles(role)
     await ctx.send(f"✅ Le rôle {role.mention} a été retiré à {member.mention}.")
     await log_action(ctx.guild, f"➖ **Rôle retiré** : {role} retiré à {member} par {ctx.author}.")
+
+
+@bot.command(help="Ajoute un emoji unicode à un rôle. Usage: !roleemoji @role 🔥")
+@commands.has_permissions(manage_roles=True)
+async def roleemoji(ctx, role: discord.Role, emoji: str):
+    try:
+        await role.edit(unicode_emoji=emoji)
+        await ctx.send(f"✅ L'emoji {emoji} a été ajouté au rôle **{role.name}** !")
+        await log_action(ctx.guild, f"🎨 **Emoji de rôle** : {emoji} ajouté à {role} par {ctx.author}.")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Erreur : le serveur n'a peut-être pas le niveau de boost requis (niveau 2 minimum). Détail : {e}")
+    except discord.Forbidden:
+        await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie que mon rôle bot est bien placé au-dessus).")
+
+
+@roleemoji.error
+async def roleemoji_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Tu n'as pas la permission de gérer les rôles.")
+    elif isinstance(error, commands.RoleNotFound):
+        await ctx.send("❌ Rôle introuvable.")
+
+
+@bot.command(help="Ajoute une image en icône de rôle (joindre une image). Usage: !roleicon @role")
+@commands.has_permissions(manage_roles=True)
+async def roleicon(ctx, role: discord.Role):
+    if not ctx.message.attachments:
+        await ctx.send("❌ Merci de joindre une image (PNG/JPG) avec la commande.")
+        return
+
+    attachment = ctx.message.attachments[0]
+
+    if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+        await ctx.send("❌ Format non supporté. Utilise une image PNG ou JPG.")
+        return
+
+    if attachment.size > 256 * 1024:
+        await ctx.send("❌ L'image est trop lourde (max 256 Ko pour une icône de rôle).")
+        return
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(attachment.url) as resp:
+            if resp.status != 200:
+                await ctx.send("❌ Impossible de télécharger l'image.")
+                return
+            image_bytes = await resp.read()
+
+    try:
+        await role.edit(icon=image_bytes)
+        await ctx.send(f"✅ L'icône a été ajoutée au rôle **{role.name}** !")
+        await log_action(ctx.guild, f"🎨 **Icône de rôle** : icône ajoutée à {role} par {ctx.author}.")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Erreur : vérifie que ton serveur a le niveau de boost 2 minimum. Détail : {e}")
+    except discord.Forbidden:
+        await ctx.send("❌ Je n'ai pas la permission de modifier ce rôle (vérifie la hiérarchie des rôles).")
+
+
+@roleicon.error
+async def roleicon_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Tu n'as pas la permission de gérer les rôles.")
+    elif isinstance(error, commands.RoleNotFound):
+        await ctx.send("❌ Rôle introuvable.")
 
 
 @bot.command(help="Supprime des messages. Usage: !clear <nombre>")
