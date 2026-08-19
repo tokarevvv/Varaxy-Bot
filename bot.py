@@ -277,7 +277,14 @@ async def on_command_error(ctx, error):
 
 
 if __name__ == "__main__":
+    print("🚀 Démarrage du script...", flush=True)
     if not TOKEN:
         raise RuntimeError("❌ DISCORD_TOKEN manquant. Ajoute-le dans un fichier .env (voir README.md).")
+    print(f"🔑 Token détecté, longueur : {len(TOKEN)}", flush=True)
     keep_alive()
-    bot.run(TOKEN)
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        print(f"❌ ERREUR AU DÉMARRAGE DU BOT : {e}", flush=True)
+        import traceback
+        traceback.print_exc()
