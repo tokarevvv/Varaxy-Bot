@@ -43,13 +43,15 @@ async def log_action(guild: discord.Guild, message: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ Connecté en tant que {bot.user} (ID: {bot.user.id})")
+    print(f"✅ Connecté en tant que {bot.user} (ID: {bot.user.id})", flush=True)
     try:
         synced = await bot.tree.sync()
-        print(f"🔄 {len(synced)} commande(s) slash synchronisée(s).")
+        print(f"🔄 {len(synced)} commande(s) slash synchronisée(s).", flush=True)
     except Exception as e:
-        print(f"⚠️ Erreur de synchronisation des commandes slash : {e}")
-    print("------")
+        print(f"⚠️ Erreur de synchronisation des commandes slash : {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+    print("------", flush=True)    
 
 
 @bot.event
